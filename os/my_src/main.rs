@@ -7,6 +7,7 @@
 //!
 //! We then call [`println!`] to display `Hello, world!`.
 
+/*
 #![deny(missing_docs)]
 #![deny(warnings)]
 #![no_std]
@@ -54,6 +55,7 @@ pub fn rust_main() -> ! {
     clear_bss();
     logging::init();
     println!("[kernel] Hello, world!");
+    println!("[kernel] Hello, rCore!"); // my code
     trace!(
         "[kernel] .text [{:#x}, {:#x})",
         stext as usize,
@@ -77,13 +79,118 @@ pub fn rust_main() -> ! {
     crate::board::QEMU_EXIT_HANDLE.exit_success(); // CI autotest success
                                                    //crate::board::QEMU_EXIT_HANDLE.exit_failure(); // CI autoest failed
 }
+*/
 
 // my code
-/*
+
 #![no_std] // 使用核心库 core
 #![no_main] // #![no_main] 告诉编译器我们没有一般意义上的 main 函数
 
 mod lang_items;
+
+/// general sbi call
+#[inline(always)]
+fn sbi_call(which: usize, args: [usize; 3]) -> usize {
+    let mut ret;
+    unsafe {
+        core::arch::asm!(
+            "ecall",
+            inlateout("x10") args[0] => ret,
+            in("x11") args[1],
+            in("x12") args[2],
+            in("x17") which,
+        );
+    }
+    ret
+}
+
+/// use sbi call to putchar in console (qemu uart handler)
+const SBI_CONSOLE_PUTCHAR: usize = 1;
+pub fn console_putchar(c: usize) {
+    sbi_call(SBI_CONSOLE_PUTCHAR, [c, 0, 0]);
+}
+
+use core::fmt::{self, Write};
+
+struct Stdout;
+
+impl Write for Stdout {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for c in s.chars() {
+            console_putchar(c as usize);
+        }
+        Ok(())
+    }
+}
+
+pub fn print(args: fmt::Arguments) {
+    Stdout.write_fmt(args).unwrap();
+}
+
+/// Print! to the host console using the format string and arguments.
+#[macro_export]
+macro_rules! print {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        print(format_args!($fmt $(, $($arg)+)?))
+    }
+}
+
+/// Println! to the host console using the format string and arguments.
+#[macro_export]
+macro_rules! println {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        print(format_args!(concat!($fmt, "\n") $(, $($arg)+)?))
+    }
+}
+
+/*
+fn syscall(id: usize, args: [usize; 3]) -> isize {
+    // 向操作系统发出'退出'的系统调用请求, 退出码为 9
+  let mut ret;
+  unsafe {
+      core::arch::asm!(
+          "ecall",
+          inlateout("x10") args[0] => ret,
+          in("x11") args[1],
+          in("x12") args[2],
+          in("x17") id,
+      );
+  }
+  ret
+}
+
+const SYSCALL_WRITE: usize = 64;
+pub fn sys_write(fd: usize, buffer: &[u8]) -> isize {
+    syscall(SYSCALL_WRITE, [fd, buffer.as_ptr() as usize, buffer.len()])
+}
+
+use core::fmt::{self, Write};
+struct Stdout;
+impl Write for Stdout {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        sys_write(1, s.as_bytes());
+        Ok(())
+    }
+}
+
+pub fn print(args: fmt::Arguments) {
+    Stdout.write_fmt(args).unwrap();
+}
+
+#[macro_export]
+macro_rules! print {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        //$crate::console::print(format_args!($fmt $(, $($arg)+)?));
+        print(format_args!($fmt $(, $($arg)+)?));
+    }
+}
+
+#[macro_export]
+macro_rules! println {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        print(format_args!(concat!($fmt, "\n") $(, $($arg)+)?));
+    }
+}*/
 
 // core::arch::global_asm!：这是一个宏，允许将汇编代码嵌入到Rust程序中。
 // include_str!("entry.asm")：这是一个函数，它返回一个包含文件 entry.asm 内容的字符串切片。
@@ -107,7 +214,9 @@ use crate::sbi::shutdown;
 
 #[no_mangle]
 pub fn rust_main() -> ! {
+    print!("Hello, ");
+    println!("rCore!");
     clear_bss();
     shutdown();
 }
-*/
+

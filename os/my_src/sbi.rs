@@ -1,5 +1,6 @@
 //! SBI call wrappers
 
+/*
 use core::arch::asm;
 
 const SBI_CONSOLE_PUTCHAR: usize = 1;
@@ -31,9 +32,10 @@ use crate::board::QEMUExit;
 pub fn shutdown() -> ! {
     crate::board::QEMU_EXIT_HANDLE.exit_failure();
 }
+*/
 
 // my code
-/*
+
 fn sbi_call(which: usize, arg0: usize, arg1: usize, arg2: usize) -> usize {
     let mut ret;
     unsafe {
@@ -53,4 +55,4 @@ pub fn shutdown() -> ! {
     sbi_call(SBI_SHUTDOWN, 0, 0, 0);
     panic!("It should shutdown!");
 }
-*/
+

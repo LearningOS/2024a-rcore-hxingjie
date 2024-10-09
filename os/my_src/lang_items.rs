@@ -1,5 +1,6 @@
 //! The panic handler
 
+/*
 use core::panic::PanicInfo;
 use crate::sbi::shutdown;
 
@@ -18,10 +19,10 @@ fn panic(info: &PanicInfo) -> ! {
     }
     shutdown()
 }
-
+*/
 
 // my code
-/*
+
 use core::panic::PanicInfo;
 
 // 实现 panic_handler 函数
@@ -29,4 +30,4 @@ use core::panic::PanicInfo;
 fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
-*/
+

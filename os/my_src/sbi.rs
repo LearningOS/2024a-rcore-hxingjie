@@ -36,23 +36,19 @@ pub fn shutdown() -> ! {
 
 // my code
 
-fn sbi_call(which: usize, arg0: usize, arg1: usize, arg2: usize) -> usize {
+/// general sbi call
+#[inline(always)]
+pub fn sbi_call(which: usize, args: [usize; 3]) -> usize {
     let mut ret;
     unsafe {
         core::arch::asm!(
             "ecall",
-            inlateout("x10") arg0 => ret,
-            in("x11") arg1,
-            in("x12") arg2,
+            inlateout("x10") args[0] => ret,
+            in("x11") args[1],
+            in("x12") args[2],
             in("x17") which,
         );
     }
     ret
-}
-
-const SBI_SHUTDOWN: usize = 8;
-pub fn shutdown() -> ! {
-    sbi_call(SBI_SHUTDOWN, 0, 0, 0);
-    panic!("It should shutdown!");
 }
 

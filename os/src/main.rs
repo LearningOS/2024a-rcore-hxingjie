@@ -53,7 +53,11 @@ pub fn rust_main() -> ! {
     }
     clear_bss();
     logging::init();
+    
     println!("[kernel] Hello, world!");
+    println!("[kernel] Hello, Rust!!"); // my code
+    println!("[kernel] Hello, rCore!!");
+
     trace!(
         "[kernel] .text [{:#x}, {:#x})",
         stext as usize,
@@ -78,36 +82,3 @@ pub fn rust_main() -> ! {
                                                    //crate::board::QEMU_EXIT_HANDLE.exit_failure(); // CI autoest failed
 }
 
-// my code
-/*
-#![no_std] // 使用核心库 core
-#![no_main] // #![no_main] 告诉编译器我们没有一般意义上的 main 函数
-
-mod lang_items;
-
-// core::arch::global_asm!：这是一个宏，允许将汇编代码嵌入到Rust程序中。
-// include_str!("entry.asm")：这是一个函数，它返回一个包含文件 entry.asm 内容的字符串切片。
-// "entry.asm" 是你汇编代码文件相对于当前Rust源文件的位置。
-core::arch::global_asm!(include_str!("entry.asm"));
-
-fn clear_bss() {
-    extern "C" {
-        fn sbss();
-        fn ebss();
-    }
-    (sbss as usize..ebss as usize).for_each(|a| {
-        unsafe {
-            (a as *mut u8).write_volatile(0)
-        }
-    })
-}
-
-mod sbi;
-use crate::sbi::shutdown;
-
-#[no_mangle]
-pub fn rust_main() -> ! {
-    clear_bss();
-    shutdown();
-}
-*/

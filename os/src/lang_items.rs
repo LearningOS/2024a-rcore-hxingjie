@@ -19,14 +19,3 @@ fn panic(info: &PanicInfo) -> ! {
     shutdown()
 }
 
-
-// my code
-/*
-use core::panic::PanicInfo;
-
-// 实现 panic_handler 函数
-#[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    loop {}
-}
-*/

@@ -36,6 +36,11 @@ pub fn clear_bss() {
     (sbss as usize..ebss as usize).for_each(|a| unsafe { (a as *mut u8).write_volatile(0) });
 }
 
+/// add two i32
+fn add_two_num(n1: i32, n2: i32) -> i32{
+    n1 + n2
+}
+
 /// the rust entry-point of os
 #[no_mangle]
 pub fn rust_main() -> ! {
@@ -54,6 +59,16 @@ pub fn rust_main() -> ! {
     clear_bss();
     logging::init();
     
+    let n1 = 2_i32;
+    let n2 = 4_i32;
+    let sum = add_two_num(n1, n2);
+    println!("{}", sum);
+    
+    let nums: [i32; 4] = [1, 2, 3, 4,];
+    for num in nums.iter() {
+        println!("{}", num);
+    }
+
     println!("[kernel] Hello, world!");
     println!("[kernel] Hello, Rust!!"); // my code
     println!("[kernel] Hello, rCore!!");

@@ -1,13 +1,15 @@
 use riscv::register::sstatus::{self, Sstatus, SPP};
 /// Trap Context
 #[repr(C)]
-pub struct TrapContext {
+pub struct TrapContext { // Trap发生时需要保存的物理资源
     /// general regs[0..31]
-    pub x: [usize; 32],
+    pub x: [usize; 32], // 直接将所有寄存器保存下来
     /// CSR sstatus      
     pub sstatus: Sstatus,
     /// CSR sepc
     pub sepc: usize,
+    
+    //scause, stval不需要在这里保存
 }
 
 impl TrapContext {

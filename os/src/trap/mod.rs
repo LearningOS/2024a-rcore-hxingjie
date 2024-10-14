@@ -23,7 +23,7 @@ use riscv::register::{
     stval, stvec,
 };
 
-global_asm!(include_str!("trap.S"));
+global_asm!(include_str!("trap.S")); // 插入Trap上下文保存和恢复的汇编代码
 
 /// initialize CSR `stvec` as the entry of `__alltraps`
 pub fn init() {
@@ -31,6 +31,7 @@ pub fn init() {
         fn __alltraps();
     }
     unsafe {
+        // 设置 stvec 寄存器
         stvec::write(__alltraps as usize, TrapMode::Direct);
     }
 }
@@ -40,16 +41,17 @@ pub fn init() {
 pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
     let scause = scause::read(); // get trap cause
     let stval = stval::read(); // get extra value
+    // 分发
     match scause.cause() {
-        Trap::Exception(Exception::UserEnvCall) => {
+        Trap::Exception(Exception::UserEnvCall) => { // 系统调用
             cx.sepc += 4;
             cx.x[10] = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]) as usize;
         }
-        Trap::Exception(Exception::StoreFault) | Trap::Exception(Exception::StorePageFault) => {
+        Trap::Exception(Exception::StoreFault) | Trap::Exception(Exception::StorePageFault) => { // 异常
             println!("[kernel] PageFault in application, kernel killed it.");
             run_next_app();
         }
-        Trap::Exception(Exception::IllegalInstruction) => {
+        Trap::Exception(Exception::IllegalInstruction) => { // 异常
             println!("[kernel] IllegalInstruction in application, kernel killed it.");
             run_next_app();
         }

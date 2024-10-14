@@ -12,12 +12,12 @@ const APP_BASE_ADDRESS: usize = 0x80400000;
 const APP_SIZE_LIMIT: usize = 0x20000;
 
 #[repr(align(4096))]
-struct KernelStack {
+struct KernelStack { // 内核栈
     data: [u8; KERNEL_STACK_SIZE],
 }
 
-#[repr(align(4096))]
-struct UserStack {
+#[repr(align(4096))] // 内存对齐，每个该类型的实例的起始地址应该是4096的倍数
+struct UserStack { // 用户栈
     data: [u8; USER_STACK_SIZE],
 }
 
@@ -29,7 +29,7 @@ static USER_STACK: UserStack = UserStack {
 };
 
 impl KernelStack {
-    fn get_sp(&self) -> usize {
+    fn get_sp(&self) -> usize { // 获取栈顶地址
         self.data.as_ptr() as usize + KERNEL_STACK_SIZE
     }
     pub fn push_context(&self, cx: TrapContext) -> &'static mut TrapContext {

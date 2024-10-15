@@ -14,9 +14,10 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::MAX_APP_NUM;
+use crate::config::{MAX_APP_NUM, MAX_SYSCALL_NUM};
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -45,6 +46,11 @@ pub struct TaskManagerInner {
     tasks: [TaskControlBlock; MAX_APP_NUM],
     /// id of current `Running` task
     current_task: usize,
+
+    // my code
+    table_task_info: [[u32; MAX_SYSCALL_NUM]; MAX_APP_NUM],
+    task_first_run:[i64; MAX_APP_NUM],
+    // my code
 }
 
 lazy_static! {
@@ -65,6 +71,10 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
+                    // my code
+                    table_task_info: [[0;MAX_SYSCALL_NUM]; MAX_APP_NUM], // init table
+                    task_first_run:[-1; MAX_APP_NUM],
+                    // my code
                 })
             },
         }
@@ -77,6 +87,11 @@ impl TaskManager {
     /// Generally, the first task in task list is an idle task (we call it zero process later).
     /// But in ch3, we load apps statically, so the first task is a real app.
     fn run_first_task(&self) -> ! {
+        // my code
+        //println!("run first task");
+        self.inner.exclusive_access().task_first_run[0] = get_time_ms() as i64;
+        // my code
+
         let mut inner = self.inner.exclusive_access();
         let task0 = &mut inner.tasks[0];
         task0.task_status = TaskStatus::Running;
@@ -119,10 +134,19 @@ impl TaskManager {
     /// or there is no `Ready` task and we can exit with all applications completed
     fn run_next_task(&self) {
         if let Some(next) = self.find_next_task() {
+            //println!("find next task");
+            
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
             inner.current_task = next;
+
+            // my code
+            if inner.task_first_run[next] == -1 {
+                inner.task_first_run[next] = get_time_ms() as i64;
+            }
+            // my code
+
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
             drop(inner);
@@ -135,6 +159,29 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    // my code
+    /// get_task_id
+    pub fn get_task_id(&self) -> usize {
+        //println!("get task id");
+        self.inner.exclusive_access().current_task
+    }
+
+    /// update_task_info
+    pub fn update_task_info(&self, syscall_id: usize) {
+        //println!("update task info");
+        let task_id = self.inner.exclusive_access().current_task;
+        self.inner.exclusive_access().table_task_info[task_id][syscall_id] += 1;
+    }
+
+    /// get_task_info
+    pub fn get_task_info(&self, task_id: usize) -> ([u32; 500], usize) {
+        //println!("get task info");
+        let task_info = self.inner.exclusive_access().table_task_info[task_id];
+        let task_first_run = self.inner.exclusive_access().task_first_run[task_id] as usize;
+        (task_info, task_first_run)
+    }
+    // my code
 }
 
 /// Run the first task in task list.

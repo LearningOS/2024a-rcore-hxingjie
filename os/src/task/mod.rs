@@ -46,11 +46,6 @@ pub struct TaskManagerInner {
     tasks: [TaskControlBlock; MAX_APP_NUM],
     /// id of current `Running` task
     current_task: usize,
-
-    // my code
-    table_task_info: [[u32; MAX_SYSCALL_NUM]; MAX_APP_NUM],
-    task_first_run:[i64; MAX_APP_NUM],
-    // my code
 }
 
 lazy_static! {
@@ -60,6 +55,12 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+
+            // my code
+            syscall_info: [0;MAX_SYSCALL_NUM], // init table
+            first_run: 0,
+            // my code
+
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -71,10 +72,6 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
-                    // my code
-                    table_task_info: [[0;MAX_SYSCALL_NUM]; MAX_APP_NUM], // init table
-                    task_first_run:[-1; MAX_APP_NUM],
-                    // my code
                 })
             },
         }
@@ -89,7 +86,7 @@ impl TaskManager {
     fn run_first_task(&self) -> ! {
         // my code
         //println!("run first task");
-        self.inner.exclusive_access().task_first_run[0] = get_time_ms() as i64;
+        self.inner.exclusive_access().tasks[0].first_run = get_time_ms();
         // my code
 
         let mut inner = self.inner.exclusive_access();
@@ -142,8 +139,8 @@ impl TaskManager {
             inner.current_task = next;
 
             // my code
-            if inner.task_first_run[next] == -1 {
-                inner.task_first_run[next] = get_time_ms() as i64;
+            if inner.tasks[next].first_run == 0 {
+                inner.tasks[next].first_run = get_time_ms();
             }
             // my code
 
@@ -171,14 +168,14 @@ impl TaskManager {
     pub fn update_task_info(&self, syscall_id: usize) {
         //println!("update task info");
         let task_id = self.inner.exclusive_access().current_task;
-        self.inner.exclusive_access().table_task_info[task_id][syscall_id] += 1;
+        self.inner.exclusive_access().tasks[task_id].syscall_info[syscall_id] += 1;
     }
 
     /// get_task_info
     pub fn get_task_info(&self, task_id: usize) -> ([u32; 500], usize) {
         //println!("get task info");
-        let task_info = self.inner.exclusive_access().table_task_info[task_id];
-        let task_first_run = self.inner.exclusive_access().task_first_run[task_id] as usize;
+        let task_info = self.inner.exclusive_access().tasks[task_id].syscall_info;
+        let task_first_run = self.inner.exclusive_access().tasks[task_id].first_run;
         (task_info, task_first_run)
     }
     // my code

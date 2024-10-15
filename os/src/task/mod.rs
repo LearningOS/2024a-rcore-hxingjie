@@ -84,14 +84,14 @@ impl TaskManager {
     /// Generally, the first task in task list is an idle task (we call it zero process later).
     /// But in ch3, we load apps statically, so the first task is a real app.
     fn run_first_task(&self) -> ! {
-        // my code
-        //println!("run first task");
-        self.inner.exclusive_access().tasks[0].first_run = get_time_ms();
-        // my code
-
         let mut inner = self.inner.exclusive_access();
         let task0 = &mut inner.tasks[0];
         task0.task_status = TaskStatus::Running;
+
+        // my code
+        task0.first_run = get_time_ms();
+        // my code
+
         let next_task_cx_ptr = &task0.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();

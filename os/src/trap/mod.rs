@@ -63,6 +63,12 @@ pub fn trap_handler() -> ! {
     // trace!("into {:?}", scause.cause());
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
+            
+            // my code
+            use crate::task::run_undapte_syscall_info;
+            run_undapte_syscall_info(cx.x[17]);
+            // my code
+
             // jump to next instruction anyway
             cx.sepc += 4;
             // get system call return value

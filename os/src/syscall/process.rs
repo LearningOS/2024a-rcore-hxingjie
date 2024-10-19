@@ -211,7 +211,6 @@ pub fn sys_set_priority(prio: isize) -> isize {
     // -1
 
     // syscall ID：140
-    // 设置当前进程优先级为 prio
     // 参数：prio 进程优先级，要求 prio >= 2
     // 返回值：如果输入合法则返回 prio，否则返回 -1
     if prio < 2 {

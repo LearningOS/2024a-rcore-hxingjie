@@ -68,6 +68,12 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// prio
+    pub prio: isize,
+
+    // stride
+    pub stride: isize,
 }
 
 impl TaskControlBlockInner {
@@ -118,6 +124,9 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+
+                    prio: 16,
+                    stride: 0,
                 })
             },
         };
@@ -191,6 +200,9 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+
+                    prio: 16,
+                    stride: 0,
                 })
             },
         });
@@ -235,6 +247,121 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    /// spawn
+    pub fn creare_new_child(self: &Arc<Self>, data: &[u8]) -> Arc<Self> {
+        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(data);
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
+            .unwrap()
+            .ppn();
+        // alloc a pid and a kernel stack in kernel space
+        let pid_handle = pid_alloc();
+        let kernel_stack = kstack_alloc();
+        let kernel_stack_top = kernel_stack.get_top();
+        let task_control_block = Arc::new(TaskControlBlock {
+            pid: pid_handle,
+            kernel_stack,
+            inner: unsafe {
+                UPSafeCell::new(TaskControlBlockInner {
+                    trap_cx_ppn,
+                    base_size: user_sp,
+                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+                    task_status: TaskStatus::Ready,
+                    memory_set,
+                    parent: Some(Arc::downgrade(self)), // 当前任务
+                    children: Vec::new(), // 孩子节点为空
+                    exit_code: 0,
+                    heap_bottom: user_sp,
+                    program_brk: user_sp,
+
+                    prio: 16,
+                    stride: 0,
+                })
+            },
+        });
+
+        let mut parent_inner = self.inner_exclusive_access();
+        parent_inner.children.push(task_control_block.clone());
+
+        // prepare TrapContext in user space
+        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+        *trap_cx = TrapContext::app_init_context(
+            entry_point,
+            user_sp,
+            KERNEL_SPACE.exclusive_access().token(),
+            kernel_stack_top,
+            trap_handler as usize,
+        );
+        task_control_block
+    }
+
+    /// mmap
+    pub fn mmap(&self, start: usize, len: usize, port: usize) -> isize {
+        use crate::mm::{VirtPageNum, VirtAddr};
+        use crate::config::PAGE_SIZE;
+        if start & (PAGE_SIZE-1) != 0 { // 虚拟地址没有对齐
+            return -1
+        }
+        
+        // start+len == end vaddr; end vaddr + (PAGE_SIZE-1) / PAGE_SIZE = end vpn
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(VirtPageNum::from((start+len + PAGE_SIZE-1) / PAGE_SIZE)); // 向上取整
+    
+        use crate::mm::MapPermission;
+        let permission = match port {
+            1 => MapPermission::U | MapPermission::R,
+            2 => MapPermission::U | MapPermission::W,
+            3 => MapPermission::U | MapPermission::R | MapPermission::W,
+            4 => MapPermission::U | MapPermission::U | MapPermission::X,
+            5 => MapPermission::U | MapPermission::U | MapPermission::X | MapPermission::R,
+            6 => MapPermission::U | MapPermission::U | MapPermission::X | MapPermission::W,
+            7 => MapPermission::U | MapPermission::U | MapPermission::X | MapPermission::W | MapPermission::R,
+            _ => return -1, // 权限错误
+        };
+    
+        let mut inner = self.inner_exclusive_access();
+        let cur_task_memory_set = &mut inner.memory_set;
+    
+        let mut vpns: Vec<VirtPageNum> = Vec::new();
+        for vpn in VirtPageNum::from(start_va).0..VirtPageNum::from(end_va).0 {
+            vpns.push(VirtPageNum::from(vpn));
+        }
+        if cur_task_memory_set.pages_has_exit(vpns.clone()) {
+            return -1; // 申请的虚拟页中有已经被申请的
+        }
+        cur_task_memory_set.insert_framed_area(start_va, end_va, permission);
+    
+        0
+    }
+
+    ///
+    pub fn munmap(&self, start: usize, len: usize) -> isize {
+        use crate::mm::{VirtPageNum, VirtAddr};
+        use crate::config::PAGE_SIZE;
+        if start & (PAGE_SIZE-1) != 0 { // 虚拟地址没有对齐
+            return -1
+        }
+
+        let start_va = VirtAddr::from(start);
+        // start+len == end vaddr; end vaddr + (PAGE_SIZE-1) / PAGE_SIZE = end vpn
+        let end_va = VirtAddr::from(VirtPageNum::from((start+len + PAGE_SIZE-1) / PAGE_SIZE)); // 向上取整
+        
+        let mut inner = self.inner_exclusive_access();
+        let cur_task_memory_set = &mut inner.memory_set;
+        
+        let mut vpns: Vec<VirtPageNum> = Vec::new();
+        for vpn in VirtPageNum::from(start_va).0..VirtPageNum::from(end_va).0 {
+            vpns.push(VirtPageNum::from(vpn));
+        }
+        if ! cur_task_memory_set.pages_all_exit(vpns.clone()) {
+            return -1; // 虚拟页没有被申请
+        }
+
+        cur_task_memory_set.remove_pages(vpns.clone());
+
+        0
     }
 }
 

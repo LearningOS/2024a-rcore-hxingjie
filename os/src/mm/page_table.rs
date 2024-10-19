@@ -5,6 +5,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
 
+use super::current_user_token;
+
 bitflags! {
     /// page table entry flags
     pub struct PTEFlags: u8 {
@@ -212,4 +214,15 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .translate_va(VirtAddr::from(va))
         .unwrap()
         .get_mut()
+}
+
+/// vaddr to paddr
+pub fn vaddr_to_paddr(ptr: usize) -> usize {
+    let page_table = PageTable::from_token(current_user_token());
+    let vaddr = VirtAddr::from(ptr);
+    let vpn = vaddr.floor();
+    let ppn = page_table.translate(vpn).unwrap().ppn();
+
+    let paddr = PhysAddr::from(ppn.0 << 12 | vaddr.page_offset());
+    paddr.0
 }

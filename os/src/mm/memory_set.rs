@@ -49,12 +49,7 @@ impl MemorySet {
         self.page_table.token()
     }
     /// Assume that no conflicts.
-    pub fn insert_framed_area(
-        &mut self,
-        start_va: VirtAddr,
-        end_va: VirtAddr,
-        permission: MapPermission,
-    ) {
+    pub fn insert_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission,) {
         self.push(
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
@@ -300,6 +295,43 @@ impl MemorySet {
             false
         }
     }
+
+    ///
+    pub fn pages_has_exit(&self, vpns: Vec<VirtPageNum>) -> bool {
+        for vpn in vpns.into_iter() {
+            if let Some(pte) = self.page_table.translate(vpn) {
+                if pte.is_valid() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// check vir page is all exit
+    pub fn pages_all_exit(&self, vpns: Vec<VirtPageNum>) -> bool {
+        for vpn in vpns.into_iter() {
+            if let Some(pte) = self.page_table.translate(vpn) {
+                if ! pte.is_valid() {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        true
+    }
+    /// remove pages
+    pub fn remove_pages(&mut self, vpns: Vec<VirtPageNum>) {
+        for area in self.areas.iter_mut() {
+            if area.data_frames.contains_key(&vpns[0]) {
+                for vpn in vpns.into_iter() {
+                    area.unmap_one(&mut self.page_table, vpn);
+                }
+                break;
+            }
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -310,12 +342,7 @@ pub struct MapArea {
 }
 
 impl MapArea {
-    pub fn new(
-        start_va: VirtAddr,
-        end_va: VirtAddr,
-        map_type: MapType,
-        map_perm: MapPermission,
-    ) -> Self {
+    pub fn new( start_va: VirtAddr, end_va: VirtAddr, map_type: MapType, map_perm: MapPermission,) -> Self {
         let start_vpn: VirtPageNum = start_va.floor();
         let end_vpn: VirtPageNum = end_va.ceil();
         Self {
@@ -447,3 +474,5 @@ pub fn remap_test() {
         .executable(),);
     println!("remap_test passed!");
 }
+
+

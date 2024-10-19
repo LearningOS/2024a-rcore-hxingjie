@@ -12,6 +12,8 @@ use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
 
+
+
 /// Processor management structure
 pub struct Processor {
     ///The task currently executing on the current processor
@@ -44,6 +46,8 @@ impl Processor {
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
     }
+
+    
 }
 
 lazy_static! {

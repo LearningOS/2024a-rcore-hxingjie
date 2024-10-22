@@ -12,6 +12,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         return -1;
     }
     if let Some(file) = &inner.fd_table[fd] {
+        // clone file.0
         let file = file.0.clone(); // arc's clone
         if !file.writable() { // can't write
             return -1;

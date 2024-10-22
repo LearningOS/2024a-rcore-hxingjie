@@ -11,6 +11,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
 
+use alloc::string::String;
+
 /// Task control block structure
 ///
 /// Directly save the contents that will not change during running
@@ -64,7 +66,7 @@ pub struct TaskControlBlockInner {
 
     /// It is set when active exit or execution error occurs
     pub exit_code: i32,
-    pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+    pub fd_table: Vec<Option<(Arc<dyn File + Send + Sync>, String)>>,
 
     /// Heap bottom
     pub heap_bottom: usize,
@@ -127,11 +129,11 @@ impl TaskControlBlock {
                     exit_code: 0,
                     fd_table: vec![
                         // 0 -> stdin
-                        Some(Arc::new(Stdin)),
+                        Some((Arc::new(Stdin), String::from("stdin"))),
                         // 1 -> stdout
-                        Some(Arc::new(Stdout)),
+                        Some((Arc::new(Stdout), String::from("stdout"))),
                         // 2 -> stderr
-                        Some(Arc::new(Stdout)),
+                        Some((Arc::new(Stdout), String::from("stderr"))),
                     ],
                     heap_bottom: user_sp,
                     program_brk: user_sp,
@@ -192,10 +194,10 @@ impl TaskControlBlock {
         let kernel_stack = kstack_alloc();
         let kernel_stack_top = kernel_stack.get_top();
         // copy fd table
-        let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
+        let mut new_fd_table: Vec<Option<(Arc<dyn File + Send + Sync>, String)>> = Vec::new();
         for fd in parent_inner.fd_table.iter() {
             if let Some(file) = fd {
-                new_fd_table.push(Some(file.clone()));
+                new_fd_table.push(Some((file.0.clone(), file.1.clone())));
             } else {
                 new_fd_table.push(None);
             }
@@ -260,6 +262,135 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    /// mmap
+    pub fn mmap(&self, start: usize, len: usize, port: usize) -> isize {
+        use crate::mm::{VirtPageNum, VirtAddr};
+        use crate::config::PAGE_SIZE;
+        if start & (PAGE_SIZE-1) != 0 { // 虚拟地址没有对齐
+            return -1
+        }
+        
+        // 计算起始和结束的虚拟地址
+        // start+len == end vaddr; end vaddr + (PAGE_SIZE-1) / PAGE_SIZE = end vpn
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(VirtPageNum::from((start+len + PAGE_SIZE-1) / PAGE_SIZE)); // 向上取整
+        // 根据起始和结束的'虚拟地址' 得到 起始和结束的'虚拟页号'
+        let mut vpns: Vec<VirtPageNum> = Vec::new();
+        for vpn in VirtPageNum::from(start_va).0..VirtPageNum::from(end_va).0 {
+            vpns.push(VirtPageNum::from(vpn));
+        }
+
+        let mut inner = self.inner_exclusive_access();
+        let cur_task_memory_set = &mut inner.memory_set;
+        if cur_task_memory_set.pages_has_exit(vpns.clone()) {
+            return -1; // 申请的虚拟页中有已经被申请的
+        }
+
+        // 构造 MapPermission
+        use crate::mm::MapPermission;
+        let permission = match port {
+            1 => MapPermission::U | MapPermission::R,
+            2 => MapPermission::U | MapPermission::W,
+            3 => MapPermission::U | MapPermission::R | MapPermission::W,
+            4 => MapPermission::U | MapPermission::U | MapPermission::X,
+            5 => MapPermission::U | MapPermission::U | MapPermission::X | MapPermission::R,
+            6 => MapPermission::U | MapPermission::U | MapPermission::X | MapPermission::W,
+            7 => MapPermission::U | MapPermission::U | MapPermission::X | MapPermission::W | MapPermission::R,
+            _ => return -1, // 权限错误
+        };
+
+        cur_task_memory_set.insert_framed_area(start_va, end_va, permission);
+    
+        0
+    }
+
+    /// munmap
+    pub fn munmap(&self, start: usize, len: usize) -> isize {
+        use crate::mm::{VirtPageNum, VirtAddr};
+        use crate::config::PAGE_SIZE;
+        if start & (PAGE_SIZE-1) != 0 { // 虚拟地址没有对齐
+            return -1
+        }
+
+        let start_va = VirtAddr::from(start);
+        // start+len == end vaddr; end vaddr + (PAGE_SIZE-1) / PAGE_SIZE = end vpn
+        let end_va = VirtAddr::from(VirtPageNum::from((start+len + PAGE_SIZE-1) / PAGE_SIZE)); // 向上取整
+        
+        let mut inner = self.inner_exclusive_access();
+        let cur_task_memory_set = &mut inner.memory_set;
+        
+        let mut vpns: Vec<VirtPageNum> = Vec::new();
+        for vpn in VirtPageNum::from(start_va).0..VirtPageNum::from(end_va).0 {
+            vpns.push(VirtPageNum::from(vpn));
+        }
+        if ! cur_task_memory_set.pages_all_exit(vpns.clone()) {
+            return -1; // 虚拟页没有被申请
+        }
+
+        cur_task_memory_set.remove_pages(vpns.clone());
+
+        0
+    }
+
+    ///
+    pub fn creare_new_child(self: &Arc<Self>, data: &[u8]) -> Arc<Self> {
+        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(data); // 根据程序数据得到创建进程需要的信息
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
+            .unwrap()
+            .ppn();
+
+        // alloc a pid and a kernel stack in kernel space
+        let pid_handle = pid_alloc();
+        let kernel_stack = kstack_alloc();
+        let kernel_stack_top = kernel_stack.get_top();
+
+        // copy fd table
+        let mut parent_inner = self.inner_exclusive_access();
+        let mut new_fd_table: Vec<Option<(Arc<dyn File + Send + Sync>, String)>> = Vec::new();
+        for fd in parent_inner.fd_table.iter() {
+            if let Some(file) = fd {
+                new_fd_table.push(Some((file.0.clone(), file.1.clone())));
+            } else {
+                new_fd_table.push(None);
+            }
+        }
+
+        let task_control_block = Arc::new(TaskControlBlock {
+            pid: pid_handle,
+            kernel_stack,
+            inner: unsafe {
+                UPSafeCell::new(TaskControlBlockInner {
+                    trap_cx_ppn,
+                    base_size: user_sp,
+                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+                    task_status: TaskStatus::Ready,
+                    memory_set,
+                    parent: Some(Arc::downgrade(self)), // 当前任务
+                    children: Vec::new(), // 孩子节点为空
+                    exit_code: 0,
+                    fd_table: new_fd_table,
+                    heap_bottom: user_sp,
+                    program_brk: user_sp,
+                })
+            },
+        });
+
+        parent_inner.children.push(task_control_block.clone());
+
+        // prepare TrapContext in user space
+        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+        *trap_cx = TrapContext::app_init_context(
+            entry_point,
+            user_sp,
+            KERNEL_SPACE.exclusive_access().token(),
+            kernel_stack_top,
+            trap_handler as usize,
+        );
+        
+        task_control_block
     }
 }
 

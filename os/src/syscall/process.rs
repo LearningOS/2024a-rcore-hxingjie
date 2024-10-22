@@ -118,11 +118,24 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    // trace!(
+    //     "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
+    //     current_task().unwrap().pid.0
+    // );
+    // -1
+    trace!("kernel: sys_get_time");
+    use crate::timer::get_time_us;
+    let us = get_time_us();
+
+    use crate::mm::vaddr_to_paddr;
+    let paddr = vaddr_to_paddr(_ts as usize);
+    let p = paddr as *mut usize;
+    unsafe { *p = us / 1_000_000; }
+
+    let paddr = vaddr_to_paddr((_ts as usize) + 8);
+    let p = paddr as *mut usize;
+    unsafe { *p = us % 1_000_000; }
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -137,21 +150,25 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 }
 
 /// YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
+    // trace!(
+    //     "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
+    //     current_task().unwrap().pid.0
+    // );
+    // -1
+    let current_task = current_task().unwrap();
+    current_task.mmap(start, len, port)
 }
 
 /// YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_munmap(start: usize, len: usize) -> isize {
+    // trace!(
+    //     "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
+    //     current_task().unwrap().pid.0
+    // );
+    // -1
+    let current_task = current_task().unwrap();
+    current_task.munmap(start, len)
 }
 
 /// change data segment size
@@ -166,12 +183,28 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
-pub fn sys_spawn(_path: *const u8) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_spawn(path: *const u8) -> isize {
+    // trace!(
+    //     "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
+    //     current_task().unwrap().pid.0
+    // );
+    // -1
+
+    let token = current_user_token(); // 根据token才可以获得页表
+    let path = translated_str(token, path); // 根据页表查到文件名字
+
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
+
+        let current_task = current_task().unwrap();
+        let new_task = current_task.creare_new_child(all_data.as_slice()); // 创建新进程
+        
+        let new_task_pid = new_task.pid.0;
+        add_task(new_task); // 将新进程加入调度队列
+        new_task_pid as isize // 返回新创建的pid
+    } else {
+        -1
+    }
 }
 
 // YOUR JOB: Set task priority.

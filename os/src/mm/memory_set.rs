@@ -318,6 +318,43 @@ impl MemorySet {
             false
         }
     }
+
+    /// 检查是否所有页面都存在
+    pub fn pages_has_exit(&self, vpns: Vec<VirtPageNum>) -> bool {
+        for vpn in vpns.into_iter() {
+            if let Some(pte) = self.page_table.translate(vpn) {
+                if pte.is_valid() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+  	/// check vir page is all exit
+    pub fn pages_all_exit(&self, vpns: Vec<VirtPageNum>) -> bool {
+        for vpn in vpns.into_iter() {
+            if let Some(pte) = self.page_table.translate(vpn) {
+                if ! pte.is_valid() {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        true
+    }
+    /// remove pages
+    pub fn remove_pages(&mut self, vpns: Vec<VirtPageNum>) {
+        for area in self.areas.iter_mut() {
+            if area.data_frames.contains_key(&vpns[0]) {
+                for vpn in vpns.into_iter() {
+                    area.unmap_one(&mut self.page_table, vpn);
+                }
+                break;
+            }
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

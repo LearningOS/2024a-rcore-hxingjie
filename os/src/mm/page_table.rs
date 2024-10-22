@@ -276,3 +276,15 @@ impl Iterator for UserBufferIterator {
         }
     }
 }
+
+/// vaddr to paddr
+pub fn vaddr_to_paddr(ptr: usize) -> usize {
+    use crate::task::current_user_token;
+    let page_table = PageTable::from_token(current_user_token());
+    let vaddr = VirtAddr::from(ptr);
+    let vpn = vaddr.floor();
+    let ppn = page_table.translate(vpn).unwrap().ppn();
+
+    let paddr = PhysAddr::from(ppn.0 << 12 | vaddr.page_offset());
+    paddr.0
+}

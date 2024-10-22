@@ -100,7 +100,7 @@ impl Inode {
             self.find_inode_id(name, root_inode)
         };
         if self.read_disk_inode(op).is_some() {
-            return None;
+            return None; // 该文件已经存在根目录
         }
         // create a new file
         // alloc a inode with an indirect block
@@ -182,5 +182,80 @@ impl Inode {
             }
         });
         block_cache_sync_all();
+    }
+
+    ///
+    pub fn link(&self, old_name: &str, new_name: &str) {
+        let inode_id = self.read_disk_inode(|root_inode| {
+            self.find_inode_id(old_name, root_inode)
+        }).expect("find_inode_id err"); // 获取 old_name 对应的 disk_inode_id
+        let inode = self.find(old_name).expect("find err");
+        inode.modify_disk_inode(| disk_inode | {
+            disk_inode.nlink += 1;
+        });
+
+        //get_block_cache(self.block_id, Arc::clone(&self.block_device))
+        //    .lock().get_mut::<DiskInode>(self.block_offset).nlink += 1;
+
+        self.modify_disk_inode(|root_inode| { // 添加 dirent
+            // append file in the dirent
+            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+            let new_size = (file_count + 1) * DIRENT_SZ;
+            // increase size
+            let mut fs = self.fs.lock();
+            self.increase_size(new_size as u32, root_inode, &mut fs);
+            // write dirent
+            let dirent = DirEntry::new(new_name, inode_id);
+            root_inode.write_at(
+                file_count * DIRENT_SZ,
+                dirent.as_bytes(),
+                &self.block_device,
+            );
+        });
+    }
+
+    ///
+    pub fn unlink(&self, name: &str) -> isize {
+        if let Some(inode) = self.find(name) {
+            let mut is_no_link = false;
+            inode.modify_disk_inode(| disk_inode | {
+                disk_inode.nlink -= 1; // 修改 nlink
+                if disk_inode.nlink == 0 { // 检查 nlink 是否为 0
+                    is_no_link = true;
+                }
+            });
+            self.modify_disk_inode(|root_inode| { // write dirent
+                let file_count = root_inode.size as usize / DIRENT_SZ; // 获取 direntry 的数量
+                for i in 0..file_count {
+                    let mut dirent = DirEntry::empty(); // 用来读取 dirent
+                    root_inode.read_at(DIRENT_SZ * i, dirent.as_bytes_mut(), &self.block_device,); // 读取 dirent
+                    if dirent.name() == name { // 检查是否是要寻找的 dirent
+                        root_inode.write_at(DIRENT_SZ * i, DirEntry::empty().as_bytes_mut(), &self.block_device,); // 写入空 dirent
+                        break;
+                    }
+                }
+            });
+            if is_no_link { inode.clear(); }
+            0
+        } else {
+            -1
+        }
+    }
+
+    ///
+    pub fn find_inode_info(&self, name: &str) -> (u32, u32, bool) {
+        let mut res = (0, 0, false);
+
+        self.read_disk_inode(|root_inode| {
+            res.0 = self.find_inode_id(name, root_inode).expect("find_inode_id err");
+        });
+        
+        let inode = self.find(name).expect("find err");
+        inode.read_disk_inode(|disk_inode| {
+            res.1 = disk_inode.nlink;
+            res.2 = disk_inode.is_file();
+        });
+
+        res
     }
 }

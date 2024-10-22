@@ -92,7 +92,8 @@ pub fn sys_fstat(fd: usize, st: *mut Stat) -> isize {
     if let Some(file) = &inner.fd_table[fd] {
         let _f = file.0.clone();
         let name = file.1.clone();
-        drop(inner);
+        drop(inner); // 结束借用
+
         let (ino, nlink, isfile) = get_inode_info(name.as_str());
         unsafe {
             let mut paddr = vaddr_to_paddr(st as usize);

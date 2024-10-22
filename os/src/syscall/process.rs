@@ -67,6 +67,7 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     let path = translated_str(token, path);
     let mut args_vec: Vec<String> = Vec::new();
     loop {
+        // args -> paddr, 取出的内容是[&String, &String, ..., 0]
         let arg_str_ptr = *translated_ref(token, args);
         if arg_str_ptr == 0 {
             break;

@@ -70,20 +70,20 @@ impl PipeRingBuffer {
         }
     }
     pub fn read_byte(&mut self) -> u8 {
-        self.status = RingBufferStatus::Normal;
-        let c = self.arr[self.head];
-        self.head = (self.head + 1) % RING_BUFFER_SIZE;
-        if self.head == self.tail {
+        self.status = RingBufferStatus::Normal; // set status
+        let c = self.arr[self.head]; // read one byte
+        self.head = (self.head + 1) % RING_BUFFER_SIZE; // ring queue
+        if self.head == self.tail { // after read one byte, head == tail, queue must be empty
             self.status = RingBufferStatus::Empty;
         }
-        c
+        c // return one byte
     }
     pub fn available_read(&self) -> usize {
-        if self.status == RingBufferStatus::Empty {
+        if self.status == RingBufferStatus::Empty { // 根据 status 判断是否可读
             0
-        } else if self.tail > self.head {
+        } else if self.tail > self.head { // 返回可读的字节数
             self.tail - self.head
-        } else {
+        } else { // 返回可读的字节数
             self.tail + RING_BUFFER_SIZE - self.head
         }
     }
@@ -95,16 +95,22 @@ impl PipeRingBuffer {
         }
     }
     pub fn all_write_ends_closed(&self) -> bool {
-        self.write_end.as_ref().unwrap().upgrade().is_none()
+        self.write_end
+            .as_ref()
+            .unwrap()
+            .upgrade()
+            .is_none()
     }
 }
 
 /// Return (read_end, write_end)
 pub fn make_pipe() -> (Arc<Pipe>, Arc<Pipe>) {
     let buffer = Arc::new(unsafe { UPSafeCell::new(PipeRingBuffer::new()) });
+
     let read_end = Arc::new(Pipe::read_end_with_buffer(buffer.clone()));
     let write_end = Arc::new(Pipe::write_end_with_buffer(buffer.clone()));
     buffer.exclusive_access().set_write_end(&write_end);
+
     (read_end, write_end)
 }
 
@@ -116,32 +122,36 @@ impl File for Pipe {
         self.writable
     }
     fn read(&self, buf: UserBuffer) -> usize {
+        // buf 是物理空间的引用
         assert!(self.readable());
-        let want_to_read = buf.len();
-        let mut buf_iter = buf.into_iter();
-        let mut already_read = 0usize;
+        let want_to_read = buf.len(); // 希望读取的字符数
+        // `buf_iter` 将传入的应用缓冲区 `buf` 转化为一个能够逐字节对于缓冲区进行访问的迭代器，
+      	// 每次调用 `buf_iter.next()` 即可按顺序取出用于访问缓冲区中一个字节的裸指针。
+        let mut buf_iter = buf.into_iter(); // buff的迭代器
+        let mut already_read = 0usize; // 已经从缓冲区读取的字符数
         loop {
-            let mut ring_buffer = self.buffer.exclusive_access();
-            let loop_read = ring_buffer.available_read();
-            if loop_read == 0 {
-                if ring_buffer.all_write_ends_closed() {
+            let mut ring_buffer = self.buffer.exclusive_access(); // 借用缓冲区
+            let loop_read = ring_buffer.available_read(); // 当前缓冲区可读取的字符数
+            if loop_read == 0 { // 当前缓冲区没有可读取的字符
+                if ring_buffer.all_write_ends_closed() { // 当前缓冲区的写端是否都关闭
                     return already_read;
                 }
-                drop(ring_buffer);
-                suspend_current_and_run_next();
-                continue;
+                //在调用之前我们需要手动释放管道自身的锁，因为切换任务时候的 `__switch` 并不是一个正常的函数调用。
+                drop(ring_buffer); // 归还缓冲区的引用
+                suspend_current_and_run_next(); // 阻塞
+                continue; // 唤醒后重新进入循环
             }
-            for _ in 0..loop_read {
+            for _ in 0..loop_read { // 读取缓冲区的全部字符
                 if let Some(byte_ref) = buf_iter.next() {
                     unsafe {
-                        *byte_ref = ring_buffer.read_byte();
+                        *byte_ref = ring_buffer.read_byte(); // 写入字符
                     }
                     already_read += 1;
                     if already_read == want_to_read {
                         return want_to_read;
                     }
                 } else {
-                    return already_read;
+                    return already_read; // buf_iter.next() == None
                 }
             }
         }
@@ -162,7 +172,7 @@ impl File for Pipe {
             // write at most loop_write bytes
             for _ in 0..loop_write {
                 if let Some(byte_ref) = buf_iter.next() {
-                    ring_buffer.write_byte(unsafe { *byte_ref });
+                    ring_buffer.write_byte(unsafe { *byte_ref }); // 写入字符到缓冲区
                     already_write += 1;
                     if already_write == want_to_write {
                         return want_to_write;

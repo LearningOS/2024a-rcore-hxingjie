@@ -120,7 +120,7 @@ pub fn sys_linkat(old_name: *const u8, new_name: *const u8) -> isize {
     //     current_task().unwrap().pid.0
     // );
     // -1
-    if old_name == new_name {
+    if old_name == new_name { // 相同文件
         return -1;
     }
     let token = current_user_token();

@@ -49,6 +49,19 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+
+    // my code
+    ///
+    pub enable_deadlock_detect: usize,
+
+    pub mutex_available: Vec<isize>,
+    pub mutex_allocation: Vec<Vec<isize>>,
+    pub mutex_need: Vec<Vec<isize>>,
+
+    pub semaphore_available: Vec<isize>,
+    pub semaphore_allocation: Vec<Vec<isize>>,
+    pub semaphore_need: Vec<Vec<isize>>,
+    // my code
 }
 
 impl ProcessControlBlockInner {
@@ -119,6 +132,18 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+
+                    // my code
+                    enable_deadlock_detect: 0,
+
+                    mutex_available: vec![],
+                    mutex_allocation: vec![vec![]],
+                    mutex_need: vec![vec![]],
+
+                    semaphore_available: vec![],
+                    semaphore_allocation: vec![vec![]],
+                    semaphore_need: vec![vec![]],
+                    // my code
                 })
             },
         });
@@ -245,6 +270,18 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+
+                    // my code 线程不会复制
+                    enable_deadlock_detect: parent.enable_deadlock_detect,
+
+                    mutex_available: vec![],
+                    mutex_allocation: vec![vec![]],
+                    mutex_need: vec![vec![]],
+
+                    semaphore_available: vec![],
+                    semaphore_allocation: vec![vec![]],
+                    semaphore_need: vec![vec![]],
+                    // my code
                 })
             },
         });

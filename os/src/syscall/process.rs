@@ -163,11 +163,24 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().process.upgrade().unwrap().getpid()
-    );
-    -1
+    // trace!(
+    //     "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
+    //     current_task().unwrap().process.upgrade().unwrap().getpid()
+    // );
+    // -1
+    use crate::timer::get_time_us;
+    let us = get_time_us();
+    let mut ptr = _ts as *mut usize;
+
+    let token = current_user_token();
+    let sec = translated_refmut(token, ptr as *mut usize);
+    *sec = us / 1_000_000;
+
+    unsafe { ptr = ptr.add(1); }
+    let usec = translated_refmut(token, ptr as *mut usize);
+    *usec = us % 1_000_000;
+
+    0
 }
 
 /// task_info syscall

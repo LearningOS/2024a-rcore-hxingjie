@@ -13,7 +13,7 @@ use crate::task::current_process;
 /// Mutex trait
 pub trait Mutex: Sync + Send {
     /// Lock the mutex
-    fn lock(&self); // add mutex_id
+    fn lock(&self);
     /// Unlock the mutex
     fn unlock(&self);
 
@@ -61,6 +61,28 @@ impl Mutex for MutexSpin {
     }
 
     fn unlock(&self) {
+        trace!("kernel: MutexSpin::unlock");
+        let mut locked = self.locked.exclusive_access();
+        *locked = false;
+    }
+
+    /// Lock the spinlock mutex
+    fn blocking_lock(&self, _mutex_id: usize) {
+        trace!("kernel: MutexSpin::lock");
+        loop {
+            let mut locked = self.locked.exclusive_access();
+            if *locked {
+                drop(locked);
+                suspend_current_and_run_next();
+                continue;
+            } else {
+                *locked = true;
+                return;
+            }
+        }
+    }
+
+    fn blocking_unlock(&self, _mutex_id: usize) {
         trace!("kernel: MutexSpin::unlock");
         let mut locked = self.locked.exclusive_access();
         *locked = false;

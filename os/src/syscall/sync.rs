@@ -150,6 +150,7 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
 
     drop(process_inner);
     drop(process);
+
     mutex.blocking_lock(mutex_id); // add mutex_id
     0
 }

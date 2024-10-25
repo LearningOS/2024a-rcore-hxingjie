@@ -56,11 +56,10 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     use crate::task::TASK_MANAGER;
     unsafe {
         (*_ti).status = TaskStatus::Running;
-        let t = TASK_MANAGER.get_task_info(TASK_MANAGER.get_task_id());
-        (*_ti).syscall_times = t.0;
-        (*_ti).time = get_time_ms() - t.1;
+        let ti = TASK_MANAGER.get_task_info();
+        (*_ti).syscall_times = ti.0;
+        (*_ti).time = get_time_ms() - ti.1;
     }
-    println!("kernel: sys_task_info");
     0
     // my code
     //trace!("kernel: sys_task_info");

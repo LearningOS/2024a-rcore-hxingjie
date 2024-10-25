@@ -158,22 +158,15 @@ impl TaskManager {
     }
 
     // my code
-    /// get_task_id
-    pub fn get_task_id(&self) -> usize {
-        //println!("get task id");
-        self.inner.exclusive_access().current_task
-    }
-
     /// update_task_info
     pub fn update_task_info(&self, syscall_id: usize) {
-        //println!("update task info");
         let task_id = self.inner.exclusive_access().current_task;
         self.inner.exclusive_access().tasks[task_id].syscall_info[syscall_id] += 1;
     }
 
     /// get_task_info
-    pub fn get_task_info(&self, task_id: usize) -> ([u32; 500], usize) {
-        //println!("get task info");
+    pub fn get_task_info(&self) -> ([u32; 500], usize) {
+        let task_id = self.inner.exclusive_access().current_task;
         let task_info = self.inner.exclusive_access().tasks[task_id].syscall_info;
         let task_first_run = self.inner.exclusive_access().tasks[task_id].first_run;
         (task_info, task_first_run)

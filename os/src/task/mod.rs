@@ -196,6 +196,18 @@ impl TaskManager {
         // start+len == end vaddr; end vaddr + (PAGE_SIZE-1) / PAGE_SIZE = end vpn
         let end_va = VirtAddr::from(VirtPageNum::from((start+len + PAGE_SIZE-1) / PAGE_SIZE)); // 向上取整
 
+        let mut vpns: Vec<VirtPageNum> = Vec::new();
+        for vpn in VirtPageNum::from(start_va).0..VirtPageNum::from(end_va).0 {
+            vpns.push(VirtPageNum::from(vpn));
+        }
+
+        let mut inner = TASK_MANAGER.inner.exclusive_access();
+        let cur_task = inner.current_task;
+        let cur_task_memory_set = &mut inner.tasks[cur_task].memory_set;
+        if cur_task_memory_set.pages_has_exist(vpns.clone()) {
+            return -1; // 虚拟页已经被申请
+        }
+
         use crate::mm::MapPermission;
         let permission = match port {
             1 => MapPermission::U | MapPermission::R,
@@ -207,18 +219,6 @@ impl TaskManager {
             7 => MapPermission::U | MapPermission::U | MapPermission::X | MapPermission::W | MapPermission::R,
             _ => return -1, // 权限错误
         };
-
-        let mut inner = TASK_MANAGER.inner.exclusive_access();
-        let cur_task = inner.current_task;
-        let cur_task_memory_set = &mut inner.tasks[cur_task].memory_set;
-        
-        let mut vpns: Vec<VirtPageNum> = Vec::new();
-        for vpn in VirtPageNum::from(start_va).0..VirtPageNum::from(end_va).0 {
-            vpns.push(VirtPageNum::from(vpn));
-        }
-        if cur_task_memory_set.pages_has_exit(vpns.clone()) {
-            return -1; // 虚拟页已经被申请
-        }
         cur_task_memory_set.insert_framed_area(start_va, end_va, permission);
 
         0

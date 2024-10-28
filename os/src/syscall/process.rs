@@ -46,17 +46,37 @@ pub fn sys_yield() -> isize {
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
     // my code
+
+    // old
+    // use crate::timer::get_time_us;
+    // let us = get_time_us();
+
+    // use crate::mm::vaddr_to_paddr;
+    // let paddr = vaddr_to_paddr(_ts as usize);
+    // let p = paddr as *mut usize;
+    // unsafe { *p = us / 1_000_000; }
+
+    // let paddr = vaddr_to_paddr((_ts as usize) + 8);
+    // let p = paddr as *mut usize;
+    // unsafe { *p = us % 1_000_000; }
+
+    // new by 10/26
+    use crate::mm::vaddr_to_paddr;
+    use crate::mm::PhysAddr;
     use crate::timer::get_time_us;
+
     let us = get_time_us();
 
-    use crate::mm::vaddr_to_paddr;
-    let paddr = vaddr_to_paddr(_ts as usize);
-    let p = paddr as *mut usize;
-    unsafe { *p = us / 1_000_000; }
+    let mut vaddr = _ts as usize;
+    let mut paddr = vaddr_to_paddr(vaddr);
+    let sec = PhysAddr::from(paddr).get_mut::<usize>();
+    *sec = us / 1_000_000;
 
-    let paddr = vaddr_to_paddr((_ts as usize) + 8);
-    let p = paddr as *mut usize;
-    unsafe { *p = us % 1_000_000; }
+    vaddr += 8;
+    paddr = vaddr_to_paddr(vaddr);
+    let usec = PhysAddr::from(paddr).get_mut::<usize>();
+    *usec = us % 1_000_000;
+
     0
     // my code
     
@@ -69,37 +89,50 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
 
+    // use crate::task::run_get_task_info;
+    // use crate::timer::get_time_ms;
+    // let (syscall_info, first_run) = run_get_task_info();
+
+    // // syscall_times 2000
+    // // time 8
+    // // status 1
+    // let mut ptr = _ti as usize;
+    // unsafe {
+    //     for idx in 0..MAX_SYSCALL_NUM {
+    //         let paddr = vaddr_to_paddr(ptr);
+    //         (*(paddr as *mut u32)) = syscall_info[idx];
+
+    //         ptr += 4;
+    //     }
+    //     let paddr = vaddr_to_paddr(ptr);
+    //     (*(paddr as *mut usize)) = get_time_ms() - first_run;
+
+    //     ptr += 8;
+    //     let paddr = vaddr_to_paddr(ptr);
+    //     (*(paddr as *mut TaskStatus)) = TaskStatus::Running;
+    // }
+
+    // new by 10/26
     use crate::task::run_get_task_info;
     use crate::timer::get_time_ms;
     let (syscall_info, first_run) = run_get_task_info();
 
-    // syscall_times 2000
-    // time 8
-    // status 1
+    use crate::mm::PhysAddr;
     let mut ptr = _ti as usize;
-    unsafe {
-        for idx in 0..MAX_SYSCALL_NUM {
-            let paddr = vaddr_to_paddr(ptr);
-            (*(paddr as *mut u32)) = syscall_info[idx];
 
-            ptr += 4;
-        }
+    for idx in 0..MAX_SYSCALL_NUM {
         let paddr = vaddr_to_paddr(ptr);
-        (*(paddr as *mut usize)) = get_time_ms() - first_run;
+        *PhysAddr::from(paddr).get_mut::<u32>() = syscall_info[idx];
 
-        ptr += 8;
-        let paddr = vaddr_to_paddr(ptr);
-        (*(paddr as *mut TaskStatus)) = TaskStatus::Running;
+        ptr += core::mem::size_of::<u32>();
     }
+    let paddr = vaddr_to_paddr(ptr);
+    *PhysAddr::from(paddr).get_mut::<usize>() = get_time_ms() - first_run;
 
-    // let (_, paddr) = vaddr_to_paddr(_ti as usize);
-    // let _ti = paddr.0 as *mut TaskInfo;
+    ptr += core::mem::size_of::<usize>();
+    let paddr = vaddr_to_paddr(ptr);
+    *PhysAddr::from(paddr).get_mut::<TaskStatus>() = TaskStatus::Running;
 
-    // unsafe {
-    //     (*_ti).status = TaskStatus::Running;
-    //     (*_ti).syscall_times = syscall_info;
-    //     (*_ti).time = get_time_ms() - first_run;
-    // }
     0
     //-1
 }

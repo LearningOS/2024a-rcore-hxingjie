@@ -258,8 +258,8 @@ impl MemorySet {
     }
 
     // my code
-    /// check vir page is exit
-    pub fn pages_has_exit(&self, vpns: Vec<VirtPageNum>) -> bool {
+    /// check vir page is exist
+    pub fn pages_has_exist(&self, vpns: Vec<VirtPageNum>) -> bool {
         for vpn in vpns.into_iter() {
             if let Some(pte) = self.page_table.translate(vpn) {
                 if pte.is_valid() {

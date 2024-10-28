@@ -214,7 +214,7 @@ pub fn sys_set_priority(prio: isize) -> isize {
     // 参数：prio 进程优先级，要求 prio >= 2
     // 返回值：如果输入合法则返回 prio，否则返回 -1
     use crate::config::BIG_STRIDE;
-    if prio < 2 || prio as u64 > BIG_STRIDE {
+    if prio < 2 || prio as u64 > BIG_STRIDE { // 判断是否合法
         -1
     } else {
         current_task().unwrap().inner_exclusive_access().prio = prio as u64;

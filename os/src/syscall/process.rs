@@ -193,7 +193,7 @@ pub fn sys_spawn(path: *const u8) -> isize {
 
     if let Some(data) = get_app_data_by_name(path.as_str()) {
         let current_task = current_task().unwrap();
-        let new_task = current_task.creare_new_child(data);
+        let new_task = current_task.spawn(data);
         let new_task_pid = new_task.pid.0;
         add_task(new_task);
         new_task_pid as isize
@@ -213,10 +213,11 @@ pub fn sys_set_priority(prio: isize) -> isize {
     // syscall ID：140
     // 参数：prio 进程优先级，要求 prio >= 2
     // 返回值：如果输入合法则返回 prio，否则返回 -1
-    if prio < 2 {
+    use crate::config::BIG_STRIDE;
+    if prio < 2 || prio as u64 > BIG_STRIDE {
         -1
     } else {
-        current_task().unwrap().inner_exclusive_access().prio = prio;
+        current_task().unwrap().inner_exclusive_access().prio = prio as u64;
         prio
     }
 }

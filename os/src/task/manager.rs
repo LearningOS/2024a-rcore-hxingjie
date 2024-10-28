@@ -34,13 +34,23 @@ impl TaskManager {
         let mut min_stride = self.ready_queue[0].inner_exclusive_access().stride;
         let mut idx = 0;
         for (i, task) in self.ready_queue.iter().enumerate() {
-            if task.inner_exclusive_access().stride < min_stride {
-                min_stride = task.inner_exclusive_access().stride;
+            if i == 0 {
+                continue;
+            }
+            let tmp = task.inner_exclusive_access().stride;
+            if tmp > min_stride && tmp - min_stride > BIG_STRIDE / 2 {
+                min_stride = tmp;
+                idx = i;
+            } else if tmp < min_stride && min_stride - tmp > BIG_STRIDE / 2 {
+
+            } else if tmp < min_stride {
+                min_stride = tmp;
                 idx = i;
             }
         }
         let pass = BIG_STRIDE / self.ready_queue[idx].inner_exclusive_access().prio;
         self.ready_queue[idx].inner_exclusive_access().stride += pass;
+        self.ready_queue[idx].inner_exclusive_access().stride %= BIG_STRIDE+1; // 
         self.ready_queue.swap_remove_back(idx)
         //self.ready_queue.pop_front()
     }

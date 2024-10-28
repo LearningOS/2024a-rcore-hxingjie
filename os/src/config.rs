@@ -25,4 +25,4 @@ pub const CLOCK_FREQ: usize = 12500000;
 pub const MEMORY_END: usize = 0x88000000;
 
 ///
-pub const BIG_STRIDE: isize = 1_000_000_000;
+pub const BIG_STRIDE: u64 = u64::MAX / 2;

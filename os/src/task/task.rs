@@ -70,10 +70,10 @@ pub struct TaskControlBlockInner {
     pub program_brk: usize,
 
     /// prio
-    pub prio: isize,
+    pub prio: u64,
 
     // stride
-    pub stride: isize,
+    pub stride: u64,
 }
 
 impl TaskControlBlockInner {
@@ -250,7 +250,7 @@ impl TaskControlBlock {
     }
 
     /// spawn
-    pub fn creare_new_child(self: &Arc<Self>, data: &[u8]) -> Arc<Self> {
+    pub fn spawn(self: &Arc<Self>, data: &[u8]) -> Arc<Self> {
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(data);
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())

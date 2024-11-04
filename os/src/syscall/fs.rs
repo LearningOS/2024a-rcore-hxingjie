@@ -1,6 +1,6 @@
 //! File and filesystem-related syscalls
 use crate::fs::{get_inode_info, link_file, open_file, unlink_file, OpenFlags, Stat, StatMode};
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer, vaddr_to_paddr};
+use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
@@ -95,20 +95,27 @@ pub fn sys_fstat(fd: usize, st: *mut Stat) -> isize {
         let name = file.1.clone();
         drop(inner); // 结束借用
 
+        // 获取所需数据
         let (ino, nlink, isfile) = get_inode_info(name.as_str());
-        unsafe {
-            let mut paddr = vaddr_to_paddr(st as usize);
-            (*(paddr as *mut u64)) = 0; // write dev
-            paddr += 8;
 
-            (*(paddr as *mut u64)) = ino as u64; // write ino
-            paddr += 8;
+        // 构造 Stat
+        let stat = Stat::new(ino as u64, if isfile { StatMode::FILE } else { StatMode::DIR }, nlink);
+        let mut src = &stat as *const Stat as *const u8;
 
-            (*(paddr as *mut StatMode)) = if isfile { StatMode::FILE } else { StatMode::DIR }; // write mode
-            paddr += 4;
-
-            (*(paddr as *mut u32)) = nlink; // write nlink
+        // 获取物理内存
+        let dest = st as *mut u8;
+        let buffers = translated_byte_buffer(
+            current_user_token(), dest, core::mem::size_of::<Stat>());
+        
+        // 写入物理内存
+        for buffer in buffers {
+            unsafe {
+                buffer.copy_from_slice(
+                    core::slice::from_raw_parts(src, buffer.len()));
+                src = src.add(buffer.len());
+            }
         }
+
         0
     } else {
         -1

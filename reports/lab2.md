@@ -20,15 +20,11 @@
 
 1. sys_get_time
 
-在 `os/src/mm/page_table.rs` 实现了 `vaddr_to_paddr` 函数
+(1) 调用`get_time_us`接口获取`us`，使用`us`构造`TimeVal`
 
-```rust
-pub fn vaddr_to_paddr(ptr: usize) -> usize
-```
+(2) 调用`translated_byte_buffer`接口将虚拟地址转换为字节数组
 
-输入虚拟地址，输出物理地址，具体逻辑是使用 `current_user_token()` 接口拿到当前任务的 token，构造临时页表，使用页表的 `translate` 方法查找物理地址。
-
-在`sys_get_time` 中使用接口 `get_time_us` 获取所需值，通过 `vaddr_to_paddr` 函数获取对应的物理地址，使用 `get_mut` 接口写入 `sec` 和 `usec` 即可。
+(3) 将构造的`TimeVal`按字节拷贝到上一步获取的字节数组
 
 
 
@@ -58,7 +54,7 @@ fn get_task_info(&self) -> ([u32; 500], usize)
 
 (3) 系统调用
 
-运行 `TASK_MANAGER` 的 `get_task_info` 方法获得当前任务的执行情况，在`sys_task_info` 中使用接口 `get_task_info` 获取所需值，通过 `vaddr_to_paddr` 函数获取对应的物理地址，使用 `get_mut` 接口写入 `syscall_info` 和 `first_run` 即可。
+运行 `TASK_MANAGER` 的 `get_task_info` 方法获得当前任务的执行情况，在`sys_task_info` 中使用接口 `get_task_info` 获取`syscall_info`和`first_run`，构造`TaskInfo`，调用`translated_byte_buffer`接口将虚拟地址转换为字节数组，将构造的`TaskInfo`按字节拷贝到上一步获取的字节数组。
 
 
 

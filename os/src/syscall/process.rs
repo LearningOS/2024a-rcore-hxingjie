@@ -1,6 +1,6 @@
 //! Process management syscalls
 use crate::{
-    config::MAX_SYSCALL_NUM, mm::vaddr_to_paddr, task::{
+    config::MAX_SYSCALL_NUM, task::{
         change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
     }
 };
@@ -47,35 +47,29 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
     // my code
 
-    // old
-    // use crate::timer::get_time_us;
-    // let us = get_time_us();
-
-    // use crate::mm::vaddr_to_paddr;
-    // let paddr = vaddr_to_paddr(_ts as usize);
-    // let p = paddr as *mut usize;
-    // unsafe { *p = us / 1_000_000; }
-
-    // let paddr = vaddr_to_paddr((_ts as usize) + 8);
-    // let p = paddr as *mut usize;
-    // unsafe { *p = us % 1_000_000; }
-
-    // new by 10/26
-    use crate::mm::vaddr_to_paddr;
-    use crate::mm::PhysAddr;
+    use crate::task::current_user_token;
+    use crate::mm::translated_byte_buffer;
     use crate::timer::get_time_us;
 
     let us = get_time_us();
+    let time_val = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
 
-    let mut vaddr = _ts as usize;
-    let mut paddr = vaddr_to_paddr(vaddr);
-    let sec = PhysAddr::from(paddr).get_mut::<usize>();
-    *sec = us / 1_000_000;
+    let mut src = &time_val as *const TimeVal as *const u8;
+    let dest = _ts as *const u8;
 
-    vaddr += 8;
-    paddr = vaddr_to_paddr(vaddr);
-    let usec = PhysAddr::from(paddr).get_mut::<usize>();
-    *usec = us % 1_000_000;
+    let buffers = translated_byte_buffer(
+        current_user_token(), dest, core::mem::size_of::<TimeVal>());
+
+    for buffer in buffers {
+        unsafe {
+            buffer.copy_from_slice(
+                core::slice::from_raw_parts(src, buffer.len()));
+            src = src.add(buffer.len());
+        }
+    }
 
     0
     // my code
@@ -89,49 +83,31 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
 
-    // use crate::task::run_get_task_info;
-    // use crate::timer::get_time_ms;
-    // let (syscall_info, first_run) = run_get_task_info();
-
-    // // syscall_times 2000
-    // // time 8
-    // // status 1
-    // let mut ptr = _ti as usize;
-    // unsafe {
-    //     for idx in 0..MAX_SYSCALL_NUM {
-    //         let paddr = vaddr_to_paddr(ptr);
-    //         (*(paddr as *mut u32)) = syscall_info[idx];
-
-    //         ptr += 4;
-    //     }
-    //     let paddr = vaddr_to_paddr(ptr);
-    //     (*(paddr as *mut usize)) = get_time_ms() - first_run;
-
-    //     ptr += 8;
-    //     let paddr = vaddr_to_paddr(ptr);
-    //     (*(paddr as *mut TaskStatus)) = TaskStatus::Running;
-    // }
-
-    // new by 10/26
+    use crate::task::current_user_token;
+    use crate::mm::translated_byte_buffer;
     use crate::task::run_get_task_info;
     use crate::timer::get_time_ms;
+
     let (syscall_info, first_run) = run_get_task_info();
 
-    use crate::mm::PhysAddr;
-    let mut ptr = _ti as usize;
+    let task_info = TaskInfo {
+        status: TaskStatus::Running,
+        syscall_times: syscall_info,
+        time: get_time_ms() - first_run,
+    };
+    let mut src = &task_info as *const TaskInfo as *const u8;
+    let dest = _ti as *const u8;
 
-    for idx in 0..MAX_SYSCALL_NUM {
-        let paddr = vaddr_to_paddr(ptr);
-        *PhysAddr::from(paddr).get_mut::<u32>() = syscall_info[idx];
-
-        ptr += core::mem::size_of::<u32>();
+    let buffers = translated_byte_buffer(
+        current_user_token(), dest, core::mem::size_of::<TaskInfo>());
+        
+    for buffer in buffers {
+        unsafe {
+            buffer.copy_from_slice(
+                core::slice::from_raw_parts(src, buffer.len()));
+            src = src.add(buffer.len());
+        }
     }
-    let paddr = vaddr_to_paddr(ptr);
-    *PhysAddr::from(paddr).get_mut::<usize>() = get_time_ms() - first_run;
-
-    ptr += core::mem::size_of::<usize>();
-    let paddr = vaddr_to_paddr(ptr);
-    *PhysAddr::from(paddr).get_mut::<TaskStatus>() = TaskStatus::Running;
 
     0
     //-1

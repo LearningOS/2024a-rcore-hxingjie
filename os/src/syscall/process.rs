@@ -124,7 +124,7 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     // );
     // -1
 
-    trace!("kernel: sys_get_time");
+    /*trace!("kernel: sys_get_time");
     use crate::timer::get_time_us;
     let us = get_time_us();
 
@@ -136,6 +136,32 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     let paddr = vaddr_to_paddr((_ts as usize) + 8);
     let p = paddr as *mut usize;
     unsafe { *p = us % 1_000_000; }
+    0*/
+
+    use crate::task::current_user_token;
+    use crate::mm::translated_byte_buffer;
+    use crate::timer::get_time_us;
+
+    let us = get_time_us();
+    let time_val = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+
+    let mut src = &time_val as *const TimeVal as *const u8;
+    let dest = _ts as *const u8;
+
+    let buffers = translated_byte_buffer(
+        current_user_token(), dest, core::mem::size_of::<TimeVal>());
+
+    for buffer in buffers {
+        unsafe {
+            buffer.copy_from_slice(
+                core::slice::from_raw_parts(src, buffer.len()));
+            src = src.add(buffer.len());
+        }
+    }
+
     0
 }
 

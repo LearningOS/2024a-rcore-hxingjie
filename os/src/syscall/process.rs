@@ -129,7 +129,7 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     use crate::timer::get_time_us;
 
     let us = get_time_us();
-    let time_val = TimeVal {
+    let time_val = TimeVal { // 构造 TimeVal
         sec: us / 1_000_000,
         usec: us % 1_000_000,
     };
